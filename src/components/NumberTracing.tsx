@@ -95,78 +95,118 @@ export function NumberTracing({
     if (!audioContextRef.current) return;
 
     const ctx = audioContextRef.current;
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
+    
+    // Master gain for the drawing sound to keep it very quiet and softer
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.15; // Increased overall volume while keeping it soft
+    masterGain.connect(ctx.destination);
 
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
+    // Create a lowpass filter to remove harsh high frequencies (key for autism-friendly tone)
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 600; // Lowered cutoff for even warmer, mellower sound
+    filter.Q.value = 0.1; // Less resonance
+    filter.connect(masterGain);
 
-    // Use letter-specific frequency and wave type (higher pitched, soothing sounds)
-    const variation = (Math.random() - 0.5) * 30; // Smaller variation for consistency
-    oscillator.frequency.setValueAtTime(
-      numberConfig.baseFreq + variation,
-      ctx.currentTime,
+    // Main tone (fundamental)
+    const osc1 = ctx.createOscillator();
+    const gain1 = ctx.createGain();
+    osc1.connect(gain1);
+    gain1.connect(filter);
+    
+    // Use sine wave for the most pure, soothing tone instead of harsh square/triangle
+    osc1.type = "sine"; 
+    
+    // Slight random pentatonic variation for musicality without dissonance
+    const pentatonicOffsets = [0, 2, 4, 7, 9];
+    const randomIndex = Math.floor(Math.random() * pentatonicOffsets.length);
+    const randomOffset = pentatonicOffsets[randomIndex] || 0;
+    // Calculate frequency based on pentatonic scale (roughly)
+    const freqMultiplier = Math.pow(2, randomOffset / 12);
+    
+    osc1.frequency.setValueAtTime(
+      (numberConfig.baseFreq * 0.35) * freqMultiplier, // Dropped even lower (closer to a marimba/bass bell)
+      ctx.currentTime
     );
-    oscillator.type = numberConfig.waveType;
 
-    // Very gentle, soothing sound with soft attack and release
-    gainNode.gain.setValueAtTime(0, ctx.currentTime);
-    gainNode.gain.linearRampToValueAtTime(
-      0.03,
-      ctx.currentTime + 0.02,
-    ); // Soft attack
-    gainNode.gain.exponentialRampToValueAtTime(
-      0.001,
-      ctx.currentTime + 0.2,
-    ); // Gentle release
+    // Sub-tone for warmth and thickness
+    const osc2 = ctx.createOscillator();
+    const gain2 = ctx.createGain();
+    osc2.connect(gain2);
+    gain2.connect(filter);
+    
+    osc2.type = "sine"; // Change sub-tone to sine as well for maximum smoothness (removed triangle)
+    osc2.frequency.setValueAtTime(
+      (numberConfig.baseFreq * 0.175) * freqMultiplier, // Even deeper rumble
+      ctx.currentTime
+    );
 
-    oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + 0.2);
+    // Very gentle envelope (Attack, Decay, Sustain, Release)
+    const now = ctx.currentTime;
+    const attackTime = 0.08; // Even slower attack for a softer swell, no tapping sounds at all
+    const releaseTime = 0.4; // Longer, more ambient release
+
+    // Envelope for main tone
+    gain1.gain.setValueAtTime(0, now);
+    gain1.gain.linearRampToValueAtTime(0.5, now + attackTime);
+    gain1.gain.exponentialRampToValueAtTime(0.001, now + attackTime + releaseTime);
+
+    // Envelope for sub tone
+    gain2.gain.setValueAtTime(0, now);
+    gain2.gain.linearRampToValueAtTime(0.3, now + attackTime);
+    gain2.gain.exponentialRampToValueAtTime(0.001, now + attackTime + releaseTime);
+
+    osc1.start(now);
+    osc2.start(now);
+    
+    osc1.stop(now + attackTime + releaseTime);
+    osc2.stop(now + attackTime + releaseTime);
   }, [numberConfig]);
 
   const playSuccessSound = useCallback(() => {
     if (!audioContextRef.current) return;
 
     const ctx = audioContextRef.current;
+    
+    // Master gain and filter for success sound
+    const masterGain = ctx.createGain();
+    masterGain.gain.value = 0.25; // Increased volume for success sound
+    masterGain.connect(ctx.destination);
+    
+    const filter = ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = 900; // Lowered cutoff for success sound too
+    filter.connect(masterGain);
 
-    // Number-specific success melody - soothing and celebratory
-    const baseFreq = numberConfig.baseFreq;
+    // A soothing, magical ascending arpeggio (Pentatonic/Major)
+    const baseFreq = numberConfig.baseFreq * 0.35; // Lower overall pitch
     const melody = [
-      baseFreq * 0.8, // Lower start for gentleness
-      baseFreq,
-      baseFreq * 1.25,
-      baseFreq * 1.5,
-    ]; // Ascending melody for success
+      baseFreq,               // Root
+      baseFreq * 1.25,        // Major 3rd
+      baseFreq * 1.5,         // Perfect 5th
+      baseFreq * 2.0,         // Octave
+      baseFreq * 2.5          // Octave + Major 3rd
+    ]; 
 
     melody.forEach((freq, index) => {
+      const now = ctx.currentTime + index * 0.18; // Even more relaxed, slower pacing
+      
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
 
       oscillator.connect(gainNode);
-      gainNode.connect(ctx.destination);
+      gainNode.connect(filter);
 
-      oscillator.frequency.setValueAtTime(
-        freq,
-        ctx.currentTime + index * 0.2,
-      );
-      oscillator.type = "sine"; // Use sine wave for smoother, more soothing success sound
+      oscillator.frequency.setValueAtTime(freq, now);
+      oscillator.type = "sine"; // Pure bell-like tone
 
-      // Gentle volume envelope for soothing effect
-      gainNode.gain.setValueAtTime(
-        0,
-        ctx.currentTime + index * 0.2,
-      );
-      gainNode.gain.linearRampToValueAtTime(
-        0.06,
-        ctx.currentTime + index * 0.2 + 0.05,
-      ); // Soft attack
-      gainNode.gain.exponentialRampToValueAtTime(
-        0.001,
-        ctx.currentTime + index * 0.2 + 0.5,
-      ); // Gentle decay
+      // Super gentle "bell hit" volume envelope
+      gainNode.gain.setValueAtTime(0, now);
+      gainNode.gain.linearRampToValueAtTime(0.6, now + 0.06); // Extremely soft attack
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 1.5); // Very long, lush decay
 
-      oscillator.start(ctx.currentTime + index * 0.2);
-      oscillator.stop(ctx.currentTime + index * 0.2 + 0.5);
+      oscillator.start(now);
+      oscillator.stop(now + 1.5);
     });
   }, [numberConfig]);
 
